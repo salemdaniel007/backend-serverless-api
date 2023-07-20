@@ -20,36 +20,98 @@ Depending on your preferred package manager, follow the instructions below to de
 - Run `yarn` to install the project dependencies
 - Run `yarn sls deploy` to deploy this stack to AWS
 
-## Test your service
+## Setting up LocalStack
+Setting up LocalStack for a Serverless app is fairly straightforward although it does require a few code changes.
+In particular, it consists of the following two steps.
 
-This template contains a single lambda function triggered by an HTTP request made on the provisioned API Gateway REST API `/hello` route with `POST` method. The request body must be provided as `application/json`. The body structure is tested by API Gateway against `src/functions/hello/schema.ts` JSON-Schema definition: it must contain the `name` property.
+1. Installing and configuring the [Serverless-LocalStack plugin](https://github.com/localstack/serverless-localstack).
+2. Adjusting AWS endpoints in Lambda functions.
 
-- requesting any other path than `/hello` with any other method than `POST` will result in API Gateway returning a `403` HTTP error code
-- sending a `POST` request to `/hello` with a payload **not** containing a string property named `name` will result in API Gateway returning a `400` HTTP error code
-- sending a `POST` request to `/hello` with a payload containing a string property named `name` will result in API Gateway returning a `200` HTTP status code with a message saluting the provided name and the detailed event processed by the lambda
-
-> :warning: As is, this template, once deployed, opens a **public** endpoint within your AWS account resources. Anybody with the URL can actively execute the API Gateway endpoint and the corresponding lambda. You should protect this endpoint with the authentication method of your choice.
-
-### Locally
-
-In order to test the hello function locally, run the following command:
-
-- `npx sls invoke local -f hello --path src/functions/hello/mock.json` if you're using NPM
-- `yarn sls invoke local -f hello --path src/functions/hello/mock.json` if you're using Yarn
-
-Check the [sls invoke local command documentation](https://www.serverless.com/framework/docs/providers/aws/cli-reference/invoke-local/) for more information.
-
-### Remotely
-
-Copy and replace your `url` - found in Serverless `deploy` command output - and `name` parameter in the following `curl` command in your terminal or in Postman to test your newly deployed application.
-
+### Installing and configuring the Serverless-LocalStack plugin
+To install the plugin, execute the following command.
 ```
-curl --location --request POST 'https://myApiEndpoint/dev/hello' \
---header 'Content-Type: application/json' \
---data-raw '{
-    "name": "Frederic"
-}'
+npm install -D serverless-localstack
 ```
+
+Next, we set up the plugin in `serverless.yml`. For that simply add the following properties.
+```yaml
+...
+
+plugins:
+  - serverless-localstack
+
+custom:
+  localstack:
+    stages:
+      - local
+```
+
+This adds the LocalStack plugin to our Serverless setup but only activates the plugin for the stage "local". 
+
+## Deploy to LocalStack
+
+Start LocalStack by running
+```bash
+localstack start
+```
+
+Then to deploy the endpoint simply run
+```bash
+serverless deploy --stage local
+```
+
+The expected result should be similar to:
+
+```bash
+Serverless: Packaging service...
+Serverless: Excluding development dependencies...
+Serverless: Creating Stack...
+Serverless: Checking Stack create progress...
+........
+Serverless: Stack create finished...
+Serverless: Uploading CloudFormation file to S3...
+Serverless: Uploading artifacts...
+Serverless: Uploading service serverless-python-rest-api-with-dynamodb.zip file to S3 (38.3 KB)...
+Serverless: Validating template...
+Serverless: Skipping template validation: Unsupported in Localstack
+Serverless: Updating Stack...
+Serverless: Checking Stack update progress...
+.....................................
+Serverless: Stack update finished...
+Service Information
+service: serverless-python-rest-api-with-dynamodb
+stage: local
+region: us-east-1
+stack: serverless-python-rest-api-with-dynamodb-local
+resources: 35
+api keys:
+  None
+endpoints:
+  http://localhost:4566/restapis/XXXXXXXXXX/local/_user_request_
+functions:
+  create: serverless-python-rest-api-with-dynamodb-local-create
+  list: serverless-python-rest-api-with-dynamodb-local-list
+  get: serverless-python-rest-api-with-dynamodb-local-get
+  update: serverless-python-rest-api-with-dynamodb-local-update
+  delete: serverless-python-rest-api-with-dynamodb-local-delete
+layers:
+  None
+```
+
+Note the endpoint `http://localhost:4566/restapis/XXXXXXXXXX/local/_user_request_`. We can use this endpoint to interact with our service. 
+
+## Usage
+
+You can signup and sign in with the following commands:
+
+### singup
+
+```bash
+curl -X POST http://localhost:4566/restapis/XXXXXXXXXX/local/_user_request_/auth/singup --data '{ data }'
+```
+
+
+Follow similar step for signin
 
 ## Template features
 
@@ -64,11 +126,11 @@ The project code base is mainly located within the `src` folder. This folder is 
 .
 ├── src
 │   ├── functions               # Lambda configuration and source code folder
-│   │   ├── hello
-│   │   │   ├── handler.ts      # `Hello` lambda source code
-│   │   │   ├── index.ts        # `Hello` lambda Serverless configuration
-│   │   │   ├── mock.json       # `Hello` lambda input parameter, if any, for local invocation
-│   │   │   └── schema.ts       # `Hello` lambda input event JSON-Schema
+│   │   ├── auth
+│   │   │   ├── handler.ts      # `auth` lambda source code
+│   │   │   ├── index.ts        # `auth` lambda Serverless configuration
+│   │   │   ├── mock.json       # `auth` lambda input parameter, if any, for local invocation
+│   │   │   └── schema.ts       # `auth` lambda input event JSON-Schema
 │   │   │
 │   │   └── index.ts            # Import/export of all lambda configurations
 │   │
@@ -83,6 +145,25 @@ The project code base is mainly located within the `src` folder. This folder is 
 ├── tsconfig.paths.json         # Typescript paths
 └── webpack.config.js           # Webpack configuration
 ```
+
+## Remove the service
+To remove the service simply run
+```
+serverless remove --stage local
+```
+
+When re-deploying the service to LocalStack, you may run into the following issue. 
+```
+ Serverless Error ----------------------------------------
+ 
+  The serverless deployment bucket "serverless-python-rest-api-with-dynamodb-local-none-b971536a" does not exist. Create it manually if you want to reuse the CloudFormation stack "serverless-python-rest-api-with-dynamodb-local", or delete the stack if it is no longer required.
+```
+
+In this case, simply restart the LocalStack Docker container (`ctrl`+`C` and `localstack start`).
+
+### Test
+
+- npx jest
 
 ### 3rd party libraries
 
