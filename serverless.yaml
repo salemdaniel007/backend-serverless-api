@@ -1,0 +1,85 @@
+service: aws-serverless-typescript-api
+
+frameworkVersion: "3"
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+  - serverless-localstack
+  - serverless-dynamodb-local
+
+provider:
+  name: aws
+  runtime: nodejs16.x
+  region: us-east-1
+  apiGateway:
+    minimumCompressionSize: 1024
+    shouldStartNameWithService: true
+  environment:
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+    NODE_OPTIONS: "--enable-source-maps --stack-trace-limit=1000"
+    DYNAMODB_TABLE: "${self:service}-${opt:stage, self:provider.stage}"
+  iam:
+    role:
+      statements:
+        - Effect: "Allow"
+          Action:
+            - "dynamodb:DescribeTable"
+            - "dynamodb:Query"
+            - "dynamodb:Scan"
+            - "dynamodb:GetItem"
+            - "dynamodb:PutItem"
+            - "dynamodb:UpdateItem"
+            - "dynamodb:DeleteItem"
+          Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+
+functions:
+  signup:
+    handler: src/functions/auth/handler.signup
+    events:
+      - http:
+          path: auth/signup
+          method: post
+          cors: true
+  signin:
+    handler: src/functions/auth/handler.signin
+    events:
+      - http:
+          path: auth/signin
+          method: post
+          cors: true
+
+
+package:
+  individually: true
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    exclude: ["aws-sdk"]
+    target: "node14"
+    define:
+      "require.resolve": undefined
+    platform: "node"
+    concurrency: 10
+  localstack:
+    stages:
+      - local
+
+resources:
+  Resources:
+    UsersTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: "UsersTable"
+        AttributeDefinitions:
+          - AttributeName: "userId"
+            AttributeType: "S"
+        KeySchema:
+          - AttributeName: "userId"
+            KeyType: "HASH"
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
